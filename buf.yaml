@@ -1,0 +1,5 @@
+version: v2
+modules:
+  - path: api/proto # Tells buf where your .proto files live
+deps:
+  - buf.build/googleapis/googleapis # Automatically pulls the REST annotations

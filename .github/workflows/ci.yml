@@ -1,0 +1,93 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------
+  # JOB 1: Linting, Generating, and Testing
+  # ---------------------------------------------------------
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Set up Buf (Protobuf Tooling)
+        uses: bufbuild/buf-setup-action@v1.30.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 1. Validate Protobufs
+      - name: Lint Protobuf files
+        run: buf lint
+
+      # 2. Verify Generated Code is Up-to-Date
+      - name: Verify generated code
+        run: |
+          make generate
+          git diff --exit-code || (echo "Generated code is out of sync. Please run 'make generate' and commit." && exit 1)
+
+      # 3. Test Go Code
+      - name: Run Unit Tests
+        run: make test
+
+      # 4. Build Go Binary
+      - name: Build Go binary
+        run: make build
+
+  # ---------------------------------------------------------
+  # JOB 2: Build & Push Docker Image (Only on 'main' branch)
+  # ---------------------------------------------------------
+  docker-publish:
+    needs: test-and-build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=short
+            type=raw,value=latest
+            type=raw,value=v1.0.${{ github.run_number }}
+
+      # 5. Build and Push Docker Image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

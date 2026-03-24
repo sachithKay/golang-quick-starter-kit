@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+// 1. The Go Package Name
+package api.v1;
+option go_package = "github.com/sachithKay/ghost/gen/go/v1;orderv1";
+
+// 2. Import the "Magic" that allows REST mapping
+import "google/api/annotations.proto";
+
+service OrderService {
+  // 3. Define the Method
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {
+    // 4. The REST Bridge
+    option (google.api.http) = {
+      post: "/v1/orders"
+      body: "*"
+    };
+  }
+}
+
+message CreateOrderRequest {
+  string customer_id = 1;
+  double amount = 2;
+}
+
+message CreateOrderResponse {
+  string order_id = 1;
+  string status = 2;
+}
